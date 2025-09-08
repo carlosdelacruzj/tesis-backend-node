@@ -2212,20 +2212,15 @@ router.get("/cliente/consulta/getAllCliente", (req, res) => {
  */
 router.post("/cliente/registro/postCliente", async (req, res) => {
   const { nombre, apellido, correo, numDoc, celular, direccion } = req.body;
+  const query = "CALL SP_postCliente(?,?,?,?,?,?)";
 
-  const query = "call SP_postCliente(?,?,?,?,?,?)";
-
-  pool.query(
-    query,
-    [nombre, apellido, correo, numDoc, celular, direccion],
-    (err, _rows, fields) => {
-      if (!err) {
-        res.status(201).json({ Status: "Registro exitoso" });
-      } else {
-        res.json(err);
-      }
+  pool.query(query, [nombre, apellido, correo, numDoc, celular, direccion], (err) => {
+    if (err) {
+      console.error('SP_postCliente error:', { code: err.code, errno: err.errno, sqlState: err.sqlState });
+      return res.status(500).json({ message: 'Error al registrar cliente', detail: err.code });
     }
-  );
+    return res.status(201).json({ status: "Registro exitoso" });
+  });
 });
 
 /**
