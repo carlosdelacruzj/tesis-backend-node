@@ -2246,15 +2246,17 @@ router.post("/cliente/registro/postCliente", async (req, res) => {
  *            type: string
  *            format: email
  *          celular:
- *            type: string
+ *            type: string  
+ *          direccion:          
+ *            type: string             
  *    responses:
  *      '201':
  *        description: Created
  */
 router.put("/cliente/actualiza/putClienteById", async (req, res) => {
-  const { idCliente, correo, celular } = req.body;
-  const query = "call SP_putClienteById(?,?,?)";
-  pool.query(query, [idCliente, correo, celular], (err, rows, fields) => {
+  const { idCliente, correo, celular, direccion } = req.body;
+  const query = "call SP_putClienteById(?,?,?,?)";
+  pool.query(query, [idCliente, correo, celular, direccion], (err, rows, fields) => {
     if (!err) {
       res.status(201).json({ Status: "Actualizacion exitosa" });
     } else {
