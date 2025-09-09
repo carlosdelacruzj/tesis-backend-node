@@ -78,14 +78,10 @@ router.get("/proyecto/consulta/getAllAsignarEquipos", (req, res) => {
  *        description: A successful response
  */
 router.get("/empleado/consulta/getAllEmpleados", (req, res) => {
-  const query = "call SP_getAllEmpleados()";
-
-  pool.query(query, (err, rows, fields) => {
-    if (!err) {
-      res.status(200).json(rows[0]);
-    } else {
-      res.json(err);
-    }
+  const query = "CALL defaultdb.SP_getAllEmpleados()"; // <-- o sin 'defaultdb.' si el pool ya apunta ahí
+  pool.query(query, (err, rows) => {
+    if (err) return res.status(500).json({ message: 'Error', detail: err.code });
+    return res.status(200).json(rows[0]);
   });
 });
 
@@ -457,30 +453,32 @@ router.get(
  * @swagger
  * /pedido/consulta/getByIDPedido/{id}:
  *  get:
- *    consumes:
- *     - application/json
- *    tags:
- *    - pedido
+ *    tags: [pedido]
+ *    summary: Obtiene un pedido por su ID
  *    parameters:
- *    - in: path
- *      name: id
- *      required: false
- *      type: integer
- *    description: Use to request all prueba
+ *      - in: path
+ *        name: id
+ *        required: true
+ *        type: integer
+ *        example: 1
  *    responses:
- *      '200':
- *        description: A successful response
+ *      '200': { description: OK }
+ *      '400': { description: Parámetro inválido }
+ *      '404': { description: Pedido no encontrado }
+ *      '500': { description: Error interno }
  */
 router.get("/pedido/consulta/getByIDPedido/:id", (req, res) => {
-  const { id } = req.params;
-  const query = "call SP_getByIDPedido(?)";
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ message: "Parámetro id inválido" });
+  }
 
-  pool.query(query, [id], (err, rows, fields) => {
-    if (!err) {
-      res.status(200).json(rows[0]);
-    } else {
-      res.json(err);
-    }
+  const sql = "CALL defaultdb.SP_getByIDPedido(?)"; // o sin "defaultdb." si tu pool ya apunta ahí
+  pool.query(sql, [id], (err, rows) => {
+    if (err) return res.status(500).json({ message: "Error", detail: err.code });
+    // rows[0] será [] si no hay pedido
+    if (!rows?.[0]?.length) return res.status(404).json({ message: "Pedido no encontrado" });
+    return res.status(200).json(rows[0][0]); // uno solo por ID
   });
 });
 
@@ -528,18 +526,13 @@ router.get("/cliente/consulta/getDataCliente/:doc", (req, res) => {
  *      '200':
  *        description: A successful response
  */
-router.get("/pedido/consulta/getLastEstadoPedido", (req, res) => {
-  const query = "call SP_getLastEstadoPedido()";
-
-  pool.query(query, (err, rows, fields) => {
-    if (!err) {
-      res.status(200).json(rows[0]);
-    } else {
-      res.json(err);
-    }
+router.get("/pedido/consulta/getLastEstadoPedido", (_req, res) => {
+  const sql = "CALL defaultdb.SP_getLastEstadoPedido()"; // o sin defaultdb si el pool ya apunta ahí
+  pool.query(sql, (err, rows) => {
+    if (err) return res.status(500).json({ message: "Error", detail: err.code });
+    return res.status(200).json(rows[0][0]); // solo 1 registro
   });
 });
-
 /**
  * @swagger
  * /proyecto/consulta/getAllPedidosContratado:
@@ -646,116 +639,89 @@ router.post(
  * /pedido/registro/postPedido:
  *  post:
  *    consumes:
- *     - application/json
+ *      - application/json
  *    tags:
- *    - pedido
+ *      - pedido
+ *    summary: Registra un nuevo pedido
+ *    description: Crea un pedido usando Evento-Servicio, DNI del cliente y datos básicos del evento.
  *    parameters:
- *    - in: body
- *      name: pedido
- *      description: datos del pedido
- *      schema:
- *        type: object
- *        required:
- *          - Nombre
- *        properties:
- *          Nombre:
- *              type: string
- *          ExS:
+ *      - in: body
+ *        name: pedido
+ *        description: Datos requeridos para crear un pedido
+ *        schema:
+ *          type: object
+ *          required:
+ *            - ExS
+ *            - doc
+ *            - fechaCreate
+ *            - fechaEvent
+ *            - horaEvent
+ *            - CodEmp
+ *            - Direccion
+ *          properties:
+ *            ExS:
  *              type: integer
- *          doc:
+ *              example: 1
+ *              description: ID de T_EventoServicio (PK_ExS_Cod)
+ *            doc:
  *              type: string
- *          fechaCreate:
- *            type: string
- *            format: date-time
- *          fechaEvent:
- *            type: string
- *            format: date-time
- *          horaEvent:
+ *              example: "47651234"
+ *              description: DNI del cliente (T_Usuario.U_Numero_Documento)
+ *            fechaCreate:
  *              type: string
- *          CodEmp:
+ *              format: date
+ *              example: "2025-09-09"
+ *              description: Fecha de creación (YYYY-MM-DD)
+ *            fechaEvent:
+ *              type: string
+ *              format: date
+ *              example: "2025-10-12"
+ *              description: Fecha del evento (YYYY-MM-DD)
+ *            horaEvent:
+ *              type: string
+ *              format: time
+ *              example: "16:30:00"
+ *              description: Hora del evento (HH:mm:ss)
+ *            CodEmp:
  *              type: integer
- *          Direccion:
+ *              example: 1
+ *              description: ID del empleado asignado (T_Empleados.PK_Em_Cod)
+ *            Direccion:
  *              type: string
- *          Ubicacion:
- *              type: string
- *          Latitud:
- *              type: string
- *          Longitud:
- *              type: string
- *          fechaEvent2:
- *              type: string
- *              format: date-time
- *          horaEvent2:
- *              type: string
- *          Direccion2:
- *              type: string
- *          Ubicacion2:
- *              type: string
- *          Latitud2:
- *              type: string
- *          Longitud2:
- *              type: string
- *          Observacion:
- *              type: string
+ *              example: "Casa Prado, Miraflores"
+ *              description: Lugar del evento (P_Lugar)
  *    responses:
  *      '201':
- *        description: Created
+ *        description: Registro exitoso
+ *        schema:
+ *          type: object
+ *          properties:
+ *            status:
+ *              type: string
+ *              example: "Registro exitoso"
+ *            result:
+ *              type: object
+ *              properties:
+ *                pedidoId:
+ *                  type: integer
+ *                  example: 42
+ *      '400':
+ *        description: Petición inválida (datos faltantes o con formato incorrecto)
+ *      '404':
+ *        description: Cliente no encontrado para el DNI
+ *      '500':
+ *        description: Error interno
  */
-router.post("/pedido/registro/postPedido", async (req, res) => {
-  const {
-    Nombre,
-    ExS,
-    doc,
-    fechaCreate,
-    fechaEvent,
-    horaEvent,
-    CodEmp,
-    Direccion,
-    Ubicacion,
-    Latitud,
-    Longitud,
-    fechaEvent2,
-    horaEvent2,
-    Direccion2,
-    Ubicacion2,
-    Latitud2,
-    Longitud2,
-    Observacion,
-  } = req.body;
-  const query = "call SP_postPedido(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+router.post("/pedido/registro/postPedido", (req, res) => {
+  const { ExS, doc, fechaCreate, fechaEvent, horaEvent, CodEmp, Direccion } = req.body;
 
-  pool.query(
-    query,
-    [
-      Nombre,
-      ExS,
-      doc,
-      fechaCreate,
-      fechaEvent,
-      horaEvent,
-      CodEmp,
-      Direccion,
-      Ubicacion,
-      Latitud,
-      Longitud,
-      fechaEvent2,
-      horaEvent2,
-      Direccion2,
-      Ubicacion2,
-      Latitud2,
-      Longitud2,
-      Observacion,
-    ],
-    (err, _rows, fields) => {
-      if (!err) {
-        res.status(201).json({ Status: "Registro exitoso" });
-      } else {
-        res.json(err);
-      }
-    }
-  );
+  // ⚠️ Formatos: 'YYYY-MM-DD' y 'HH:mm:ss'
+  const q = "CALL defaultdb.SP_postPedido(?,?,?,?,?,?,?)";
+  pool.query(q, [ExS, doc, fechaCreate, fechaEvent, horaEvent, CodEmp, Direccion], (err, rows) => {
+    if (err) return res.status(500).json({ message: 'Error al registrar pedido', detail: err.code });
+    return res.status(201).json({ status: 'Registro exitoso', result: rows?.[0]?.[0] });
+  });
 });
-
 /**
  * @swagger
  * /eventos_servicios/actualiza/putByIdEventoxServicio:
@@ -811,98 +777,82 @@ router.put(
  * /pedido/actualiza/putByIdPedido:
  *  put:
  *    consumes:
- *     - application/json
+ *      - application/json
  *    tags:
- *    - pedido
+ *      - pedido
+ *    summary: Actualiza un pedido por su ID
  *    parameters:
- *    - in: body
- *      name: pedido
- *      description: pedido
- *      schema:
- *        type: object
- *        required:
- *          - EP_Cod
- *        properties:
- *          EP_Cod:
- *            type: integer
- *          fecha:
- *            type: string
- *            format: date-time
- *          hora:
- *            type: string
- *          ubicacion:
- *            type: string
- *          lugar:
- *            type: string
- *          latitud:
- *            type: string
- *          longitud:
- *            type: string
- *          fecha2:
- *            type: string
- *            format: date-time
- *          hora2:
- *            type: string
- *          ubicacion2:
- *            type: string
- *          lugar2:
- *            type: string
- *          latitud2:
- *            type: string
- *          longitud2:
- *            type: string
- *          id:
- *            type: integer
+ *      - in: body
+ *        name: pedido
+ *        description: Campos actualizables del pedido
+ *        schema:
+ *          type: object
+ *          required:
+ *            - id
+ *            - estadoPedido
+ *            - fechaEvent
+ *            - horaEvent
+ *            - lugar
+ *            - empleado
+ *            - estadoPago
+ *          properties:
+ *            id:
+ *              type: integer
+ *              example: 1
+ *              description: PK del pedido (PK_P_Cod)
+ *            estadoPedido:
+ *              type: integer
+ *              example: 2
+ *              description: Estado del pedido (FK_EP_Cod)
+ *            fechaEvent:
+ *              type: string
+ *              format: date
+ *              example: "2025-10-12"
+ *              description: Fecha del evento (YYYY-MM-DD)
+ *            horaEvent:
+ *              type: string
+ *              format: time
+ *              example: "16:30:00"
+ *              description: Hora del evento (HH:mm:ss)
+ *            lugar:
+ *              type: string
+ *              example: "Casa Prado, Miraflores"
+ *              description: Lugar del evento (P_Lugar)
+ *            empleado:
+ *              type: integer
+ *              example: 1
+ *              description: Empleado asignado (FK_Em_Cod)
+ *            estadoPago:
+ *              type: integer
+ *              example: 1
+ *              description: Estado de pago (FK_ESP_Cod)
  *    responses:
- *      '201':
- *        description: Created
+ *      '200':
+ *        description: Actualización exitosa
+ *      '400':
+ *        description: Petición inválida
+ *      '404':
+ *        description: Pedido no encontrado
+ *      '500':
+ *        description: Error interno
  */
-router.put("/pedido/actualiza/putByIdPedido", async (req, res) => {
+router.put("/pedido/actualiza/putByIdPedido", (req, res) => {
   const {
-    EP_Cod,
-    fecha,
-    hora,
-    ubicacion,
-    lugar,
-    latitud,
-    longitud,
-    fecha2,
-    hora2,
-    ubicacion2,
-    lugar2,
-    latitud2,
-    longitud2,
-    id,
+    id,             // PK_P_Cod
+    estadoPedido,   // FK_EP_Cod
+    fechaEvent,     // 'YYYY-MM-DD'
+    horaEvent,      // 'HH:mm:ss'
+    lugar,          // P_Lugar
+    empleado,       // FK_Em_Cod
+    estadoPago      // FK_ESP_Cod
   } = req.body;
-  const query = "call SP_putByIdPedido(?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
-  pool.query(
-    query,
-    [
-      EP_Cod,
-      fecha,
-      hora,
-      ubicacion,
-      lugar,
-      latitud,
-      longitud,
-      fecha2,
-      hora2,
-      ubicacion2,
-      lugar2,
-      latitud2,
-      longitud2,
-      id,
-    ],
-    (err, rows, fields) => {
-      if (!err) {
-        res.status(201).json({ Status: "Registro exitoso" });
-      } else {
-        res.json(err);
-      }
-    }
-  );
-});
 
+  const sql = "CALL defaultdb.SP_putByIdPedido(?,?,?,?,?,?,?)";
+  pool.query(sql, [id, estadoPedido, fechaEvent, horaEvent, lugar, empleado, estadoPago], (err, rows) => {
+    if (err) return res.status(500).json({ message: 'Error al actualizar pedido', detail: err.code });
+    return res.status(200).json({ status: "Actualización exitosa", result: rows?.[0]?.[0] });
+  });
+});
 /**
  * @swagger
  * /proyecto/consulta/getAsignarEquiposById/{id}:
@@ -1651,14 +1601,10 @@ router.get(
  *        description: A successful response
  */
 router.get("/empleado/consulta/getAllEmpleadosList", (req, res) => {
-  const query = "call SP_getAllEmpleadosList()";
-
-  pool.query(query, (err, rows, fields) => {
-    if (!err) {
-      res.status(200).json(rows[0]);
-    } else {
-      res.json(err);
-    }
+  const query = "CALL defaultdb.SP_getAllEmpleadosList()"; // o quita 'defaultdb.' si tu pool ya usa esa DB
+  pool.query(query, (err, rows) => {
+    if (err) return res.status(500).json({ message: 'Error', detail: err.code });
+    res.status(200).json(rows[0]);
   });
 });
 
@@ -2035,23 +1981,17 @@ router.get("/contrato/consulta/getAllContratosByPedido/:pedido", (req, res) => {
  *      '201':
  *        description: Created
  */
-router.put("/empleado/actualiza/putEmpleadoById", async (req, res) => {
+router.put("/empleado/actualiza/putEmpleadoById", (req, res) => {
   const { ID, Celular, Correo, Direccion, Estado } = req.body;
-
-  const query = "call SP_putEmpleadoById(?,?,?,?,?)";
   pool.query(
-    query,
+    "CALL defaultdb.SP_putEmpleadoById(?,?,?,?,?)",
     [ID, Celular, Correo, Direccion, Estado],
-    (err, rows, fields) => {
-      if (!err) {
-        res.status(201).json({ Status: "Actualizacion exitosa" });
-      } else {
-        res.json(err);
-      }
+    (err, rows) => {
+      if (err) return res.status(500).json({ message: 'Error al actualizar empleado', detail: err.code });
+      return res.status(200).json({ status: "Actualización exitosa", result: rows?.[0]?.[0] });
     }
   );
 });
-
 /**
  * @swagger
  * /equipo/actualiza/putEstadoEquipo:
