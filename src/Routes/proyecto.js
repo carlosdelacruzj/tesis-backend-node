@@ -28,7 +28,7 @@ EJEM:
  *        description: A successful response
  */
 router.get("/proyecto/consulta/getAllProyecto", (req, res) => {
-  const query = "call SP_getAllProyects()";
+  const query = "call SP_getAllProyecto()";
 
   pool.query(query, (err, rows, fields) => {
     if (!err) {
@@ -53,17 +53,12 @@ router.get("/proyecto/consulta/getAllProyecto", (req, res) => {
  *        description: A successful response
  */
 router.get("/proyecto/consulta/getAllAsignarEquipos", (req, res) => {
-  const query = "call SP_getAllAsignarEquipos()";
-
-  pool.query(query, (err, rows, fields) => {
-    if (!err) {
-      res.status(200).json(rows[0]);
-    } else {
-      res.json(err);
-    }
+  const sql = "CALL defaultdb.SP_getAllAsignarEquipos()"; // usa 'defaultdb.' si tu pool no fija DB
+  pool.query(sql, (err, rows) => {
+    if (err) return res.status(500).json({ message: "Error", detail: err.code });
+    return res.status(200).json(rows[0]);
   });
 });
-
 /**
  * @swagger
  * /empleado/consulta/getAllEmpleados:
@@ -184,19 +179,21 @@ router.get("/equipo/consulta/getByTipoEquipo/:idTipoEquipo", (req, res) => {
  *      '200':
  *        description: A successful response
  */
+// GET /proyecto/consulta/getByIdProyecto/:id
 router.get("/proyecto/consulta/getByIdProyecto/:id", (req, res) => {
-  const { id } = req.params;
-  const query = "call SP_getByIdProyecto(?)";
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ message: "Parámetro id inválido" });
+  }
 
-  pool.query(query, [id], (err, rows, fields) => {
-    if (!err) {
-      res.status(200).json(rows[0]);
-    } else {
-      res.json(err);
-    }
+  const sql = "CALL defaultdb.SP_getByIdProyecto(?)"; // quita 'defaultdb.' si tu pool ya apunta allí
+  pool.query(sql, [id], (err, rows) => {
+    if (err) return res.status(500).json({ message: "Error", detail: err.code });
+    const item = rows?.[0]?.[0];
+    if (!item) return res.status(404).json({ message: "Proyecto no encontrado" });
+    return res.status(200).json(item);
   });
 });
-
 /**
  * @swagger
  * /proyecto/registro/postProyecto:
@@ -225,23 +222,17 @@ router.get("/proyecto/consulta/getByIdProyecto/:id", (req, res) => {
  *      '201':
  *        description: Created
  */
-router.post("/proyecto/registro/postProyecto", async (req, res) => {
+router.post("/proyecto/registro/postProyecto", (req, res) => {
   const { proyecto_nombre, codigo_pedido, fecha_inicio_edicion } = req.body;
-  const query = "call SP_postProyect(?,?,?)";
 
-  pool.query(
-    query,
-    [proyecto_nombre, codigo_pedido, fecha_inicio_edicion],
-    (err, _rows, fields) => {
-      if (!err) {
-        res.status(201).json({ Status: "Registro exitoso" });
-      } else {
-        res.json(err);
-      }
-    }
-  );
+  // Enviar fecha como 'YYYY-MM-DD' (no ISO con 'Z')
+  const sql = "CALL defaultdb.SP_postProyecto(?,?,?)";
+
+  pool.query(sql, [proyecto_nombre, codigo_pedido, fecha_inicio_edicion], (err, rows) => {
+    if (err) return res.status(500).json({ message: "Error al registrar proyecto", detail: err.code });
+    return res.status(201).json({ Status: "Registro exitoso", result: rows?.[0]?.[0] });
+  });
 });
-
 /**
  * @swagger
  * /proyecto/actualiza/putProyectoById:
@@ -276,20 +267,20 @@ router.post("/proyecto/registro/postProyecto", async (req, res) => {
  *      '201':
  *        description: Created
  */
-router.put("/proyecto/actualiza/putProyectoById", async (req, res) => {
-  const { finFecha, multimedia, edicion, enlace, Observacion, id } = req.body;
-  const query = "call SP_putProyectoById(?,?,?,?,?,?)";
-  pool.query(
-    query,
-    [finFecha, multimedia, edicion, enlace, Observacion, id],
-    (err, rows, fields) => {
-      if (!err) {
-        res.status(201).json({ Status: "Actualizacion exitosa" });
-      } else {
-        res.json(err);
-      }
+router.put("/proyecto/actualiza/putProyectoById", (req, res) => {
+  const { finFecha, multimedia, edicion, enlace, id } = req.body;
+
+  const sql = "CALL defaultdb.SP_putProyectoById(?,?,?,?,?)";
+  pool.query(sql, [finFecha, multimedia, edicion, enlace, id], (err, rows) => {
+    if (err) {
+      return res.status(500).json({ message: "Error al actualizar proyecto", detail: err.code });
     }
-  );
+    const result = rows?.[0]?.[0];
+    if (!result || result.rowsAffected === 0) {
+      return res.status(404).json({ message: "Proyecto no encontrado" });
+    }
+    return res.status(200).json({ Status: "Actualización exitosa", result });
+  });
 });
 
 // EN ESTA PARTE SE VE TODO ACERCA DEL PEDIDO
@@ -546,15 +537,11 @@ router.get("/pedido/consulta/getLastEstadoPedido", (_req, res) => {
  *      '200':
  *        description: A successful response
  */
-router.get("/proyecto/consulta/getAllPedidosContratado", (req, res) => {
-  const query = "call SP_getAllPedidosContratado()";
-
-  pool.query(query, (err, rows, fields) => {
-    if (!err) {
-      res.status(200).json(rows[0]);
-    } else {
-      res.json(err);
-    }
+router.get("/proyecto/consulta/getAllPedidosContratado", (_req, res) => {
+  const sql = "CALL defaultdb.SP_getAllPedidosContratado()";
+  pool.query(sql, (err, rows) => {
+    if (err) return res.status(500).json({ message: "Error", detail: err.code });
+    return res.status(200).json(rows[0]);
   });
 });
 
@@ -857,30 +844,32 @@ router.put("/pedido/actualiza/putByIdPedido", (req, res) => {
  * @swagger
  * /proyecto/consulta/getAsignarEquiposById/{id}:
  *  get:
- *    consumes:
- *     - application/json
- *    tags:
- *    - proyecto
+ *    tags: [proyecto]
+ *    summary: Lista asignaciones de equipo por proyecto
  *    parameters:
- *    - in: path
- *      name: id
- *      required: false
- *      type: integer
- *    description: Use to request all prueba
+ *      - in: path
+ *        name: id
+ *        required: true
+ *        type: integer
+ *        example: 1
  *    responses:
- *      '200':
- *        description: A successful response
+ *      '200': { description: OK }
+ *      '400': { description: Parámetro inválido }
+ *      '404': { description: Sin asignaciones }
+ *      '500': { description: Error interno }
  */
 router.get("/proyecto/consulta/getAsignarEquiposById/:id", (req, res) => {
-  const { id } = req.params;
-  const query = "call SP_getAsignarEquiposById(?)";
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ message: "Parámetro id inválido" });
+  }
 
-  pool.query(query, [id], (err, rows, fields) => {
-    if (!err) {
-      res.status(200).json(rows[0]);
-    } else {
-      res.json(err);
-    }
+  const sql = "CALL defaultdb.SP_getAsignarEquiposById(?)";
+  pool.query(sql, [id], (err, rows) => {
+    if (err) return res.status(500).json({ message: "Error", detail: err.code });
+    const data = rows?.[0] ?? [];
+    if (!data.length) return res.status(404).json({ message: "Sin asignaciones para este proyecto" });
+    return res.status(200).json(data);
   });
 });
 
@@ -911,21 +900,22 @@ router.get("/proyecto/consulta/getAsignarEquiposById/:id", (req, res) => {
  *      '201':
  *        description: Created
  */
-router.put(
-  "/proyecto/actualiza/putByIdAsignarPersonalEquipo",
-  async (req, res) => {
-    const { id, empleado, equipo } = req.body;
-    const query =
-      "call SP_putByIdAsignarPersonalEquipo(?,?,?,?,?,?,?,?,?,?,?,?,?)";
-    pool.query(query, [id, empleado, equipo], (err, rows, fields) => {
-      if (!err) {
-        res.status(201).json({ Status: "Registro exitoso" });
-      } else {
-        res.json(err);
-      }
-    });
+router.put("/proyecto/actualiza/putByIdAsignarPersonalEquipo", (req, res) => {
+  const { id, empleado, equipo } = req.body;
+
+  // valida básico
+  if (!Number.isInteger(Number(id)) || !Number.isInteger(Number(empleado)) || !equipo) {
+    return res.status(400).json({ message: "Parámetros inválidos" });
   }
-);
+
+  const sql = "CALL defaultdb.SP_putByIdAsignarPersonalEquipo(?,?,?)";
+  pool.query(sql, [id, empleado, equipo], (err, rows) => {
+    if (err) return res.status(500).json({ message: "Error", detail: err.code });
+    const r = rows?.[0]?.[0];
+    if (!r || r.rowsAffected === 0) return res.status(404).json({ message: "Asignación no encontrada" });
+    return res.status(200).json({ status: "Actualización exitosa", result: r });
+  });
+});
 
 /**
  * @swagger
@@ -954,22 +944,24 @@ router.put(
  *      '201':
  *        description: Created
  */
-router.post(
-  "/proyecto/registro/postAsignarPersonalEquipo",
-  async (req, res) => {
-    const { proyecto, empleado, equipos } = req.body;
-    const query = "call SP_postAsignarPersonalEquipo(?,?,?)";
+router.post("/proyecto/registro/postAsignarPersonalEquipo", (req, res) => {
+  const { proyecto, empleado, equipos } = req.body; // 'equipos' = un código, ej. "CAM-0002"
 
-    pool.query(query, [proyecto, empleado, equipos], (err, _rows, fields) => {
-      if (!err) {
-        res.status(201).json({ Status: "Registro exitoso" });
-      } else {
-        res.json(err);
-      }
-    });
+  if (!Number.isInteger(Number(proyecto)) ||
+      !Number.isInteger(Number(empleado)) ||
+      !equipos) {
+    return res.status(400).json({ message: "Parámetros inválidos" });
   }
-);
 
+  const sql = "CALL defaultdb.SP_postAsignarPersonalEquipo(?,?,?)";
+  pool.query(sql, [proyecto, empleado, equipos], (err, rows) => {
+    if (err) {
+      // ER_NO_REFERENCED_ROW_2 = FK inválida (proyecto/empleado/equipo no existe)
+      return res.status(500).json({ message: "Error", detail: err.code });
+    }
+    return res.status(201).json({ Status: "Registro exitoso", result: rows?.[0]?.[0] });
+  });
+});
 /**
  * @swagger
  * /proyecto/consulta/getAllEventosProyectos:
@@ -983,18 +975,13 @@ router.post(
  *      '200':
  *        description: A successful response
  */
-router.get("/proyecto/consulta/getAllEventosProyectos", (req, res) => {
-  const query = "call SP_getAllEventosProyectos()";
-
-  pool.query(query, (err, rows, fields) => {
-    if (!err) {
-      res.status(200).json(rows[0]);
-    } else {
-      res.json(err);
-    }
+router.get("/proyecto/consulta/getAllEventosProyectos", (_req, res) => {
+  const sql = "CALL defaultdb.SP_getAllEventosProyectos()"; // usa defaultdb si el pool no apunta a esa DB
+  pool.query(sql, (err, rows) => {
+    if (err) return res.status(500).json({ message: "Error", detail: err.code });
+    return res.status(200).json(rows[0]);
   });
 });
-
 /**
  * @swagger
  * /contrato/consulta/getAllContratos:
@@ -1024,76 +1011,75 @@ router.get("/contrato/consulta/getAllContratos", (req, res) => {
  * @swagger
  * /proyecto/delete/deleteAsignarEquipoById/{id}:
  *  delete:
- *    consumes:
- *     - application/json
- *    tags:
- *    - proyecto
+ *    tags: [proyecto]
+ *    summary: Elimina una asignación de equipo por id
  *    parameters:
- *    - in: path
- *      name: id
- *      required: false
- *      type: integer
- *    description: Use to request all prueba
+ *      - in: path
+ *        name: id
+ *        required: true
+ *        type: integer
+ *        example: 3
  *    responses:
- *      '200':
- *        description: A successful response
+ *      '200': { description: Eliminado }
+ *      '400': { description: Parámetro inválido }
+ *      '404': { description: No encontrado }
+ *      '500': { description: Error interno }
  */
 router.delete("/proyecto/delete/deleteAsignarEquipoById/:id", (req, res) => {
-  const { id } = req.params;
-  const query = "call SP_deleteAsignarEquipoById(?)";
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ message: "Parámetro id inválido" });
+  }
 
-  pool.query(query, [id], (err, rows, fields) => {
-    if (!err) {
-      res.status(200).json(rows[0]);
-    } else {
-      res.json(err);
+  const sql = "CALL defaultdb.SP_deleteAsignarEquipoById(?)"; // quita defaultdb. si tu pool ya apunta ahí
+  pool.query(sql, [id], (err, rows) => {
+    if (err) return res.status(500).json({ message: "Error", detail: err.code });
+
+    const r = rows?.[0]?.[0];
+    if (!r || r.rowsAffected === 0) {
+      return res.status(404).json({ message: "Asignación no encontrada" });
     }
+    return res.status(200).json({ status: "Eliminada", result: r });
   });
 });
-
 /**
  * @swagger
- * /proyecto/consulta/getAllEquiposFiltrados/{fecha}/{proyecto}/{idTipoEquipo}:
+ * /proyecto/consulta/getAllEquiposFiltrados:
  *  get:
- *    consumes:
- *     - application/json
- *    tags:
- *    - proyecto
+ *    tags: [proyecto]
+ *    summary: Lista equipos filtrados (parámetros opcionales)
  *    parameters:
- *    - in: path
- *      name: fecha
- *      required: false
- *      type: string
- *      format: date-time
- *    - in: path
- *      name: proyecto
- *      required: false
- *      type: integer
- *    - in: path
- *      name: idTipoEquipo
- *      required: false
- *      type: integer
- *    description: Use to request all prueba
+ *      - in: query
+ *        name: fecha
+ *        required: false
+ *        type: string
+ *        format: date
+ *        example: 2025-09-11
+ *      - in: query
+ *        name: proyecto
+ *        required: false
+ *        type: integer
+ *        example: 1
+ *      - in: query
+ *        name: idTipoEquipo
+ *        required: false
+ *        type: integer
+ *        example: 2
  *    responses:
- *      '200':
- *        description: A successful response
+ *      '200': { description: OK }
  */
-router.get(
-  "/proyecto/consulta/getAllEquiposFiltrados/:fecha/:proyecto/:idTipoEquipo",
-  (req, res) => {
-    const { fecha, proyecto, idTipoEquipo } = req.params;
-    const query = "call SP_getAllEquiposFiltrados(?,?,?)";
+router.get("/proyecto/consulta/getAllEquiposFiltrados", (req, res) => {
+  const { fecha, proyecto, idTipoEquipo } = req.query;
+  const sql = "CALL defaultdb.SP_getAllEquiposFiltrados(?,?,?)";
+  const pFecha = fecha ? fecha.slice(0,10) : null;
+  const pProy  = proyecto ? Number(proyecto) : null;
+  const pTipo  = idTipoEquipo ? Number(idTipoEquipo) : null;
 
-    pool.query(query, [fecha, proyecto, idTipoEquipo], (err, rows, fields) => {
-      if (!err) {
-        res.status(200).json(rows[0]);
-      } else {
-        res.json(err);
-      }
-    });
-  }
-);
-
+  pool.query(sql, [pFecha, pProy, pTipo], (err, rows) => {
+    if (err) return res.status(500).json({ message: "Error", detail: err.code });
+    res.status(200).json(rows?.[0] ?? []);
+  });
+});
 /**
  * @swagger
  * /mobile/consulta/getAllEventosTodayByEmpl/{fecha}/{idEmpleado}:
